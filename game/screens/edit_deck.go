@@ -328,7 +328,6 @@ func (s *EditDeckScreen) Draw(screen *ebiten.Image, W, H int, scale float64) {
 	screen.DrawImage(s.TiledBackground, &baseOpts)
 
 	screen.DrawImage(s.DeckBackground, &dckOpts)
-	s.deckDropArea.Draw(screen)
 
 	// Calculate position for collection list at bottom of screen
 	collectionY := H - COLLECTION_HEIGHT
@@ -338,8 +337,12 @@ func (s *EditDeckScreen) Draw(screen *ebiten.Image, W, H int, scale float64) {
 	s.CollectionList.Draw(screen, &opts, scale)
 	s.drawCollectionCounts(screen, scale, collectionY)
 
-	drawDeckSellTarget(screen, editDeckSellBounds())
-	s.sellDropArea.Draw(screen)
+	// The drop-to-sell target only means something where a city is buying. With no
+	// city behind this screen, a target that swallowed cards without paying for
+	// them would be a trap.
+	if s.City != nil {
+		drawDeckSellTarget(screen, editDeckSellBounds())
+	}
 
 	s.drawDeckCards(screen, scale)
 	s.drawDeckStats(screen, scale)
@@ -358,7 +361,9 @@ func (s *EditDeckScreen) Draw(screen *ebiten.Image, W, H int, scale float64) {
 		magOpts.GeoM.Translate(magX*scale, magY*scale)
 		screen.DrawImage(s.MagnifierImage, magOpts)
 
-		if s.MagnifiedCard != nil {
+		// A city is where a card's price comes from. Opened without one — which is
+		// how cmd/deck_edit runs this screen — there is no price to show.
+		if s.MagnifiedCard != nil && s.City != nil {
 			salePrice := s.MagnifiedCard.SalePrice(s.City)
 			priceText := fmt.Sprintf("Sale Price: %d gold", salePrice)
 			textX := magX + 10
@@ -678,6 +683,14 @@ func (s *EditDeckScreen) sellDroppedCard(data dragdrop.DragData) bool {
 }
 
 func (s *EditDeckScreen) sellCard(card *domain.Card, fromDeck bool) bool {
+	// Without a city there is nobody to sell to. This comes first because the
+	// price is read after the card has already been taken out of the deck: a nil
+	// city would panic with the card moved and no gold paid. The original's
+	// standalone builder has no Sell among its entries either.
+	if s.City == nil {
+		return false
+	}
+
 	deckCount := s.Player.CardCollection.GetDeckCount(card, s.Player.ActiveDeck)
 	if fromDeck {
 		if deckCount == 0 {

@@ -101,6 +101,10 @@ func main() {
 	}
 	player.Gold = 1000
 
+	// Warm the same image cache the game warms when a world starts: without it the
+	// collection draws blank frames with names until each card is hovered.
+	go domain.PreloadCardImages(domain.CollectPriorityCards(player))
+
 	city := &domain.City{Name: "Test City", Tier: domain.TierTown}
 	editDeckScreen, err := screens.NewEditDeckScreen(player, city, testScreenWidth, testScreenHeight)
 	if err != nil {
